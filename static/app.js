@@ -35,7 +35,7 @@ function initEvents() {
     });
 }
 
-let isPolling = false;
+let pollCount = 0;
 
 function getFilteredAccounts() {
     if (!rawData || !rawData.contas) return [];
@@ -49,6 +49,10 @@ function getFilteredAccounts() {
 async function fetchData(preset = null, force = false) {
     if (typeof preset !== 'string' || !preset) {
         preset = document.getElementById('periodSelect').value;
+    }
+
+    if (force) {
+        pollCount = 0;
     }
 
     const btnRefresh = document.getElementById('btnRefresh');
@@ -66,19 +70,22 @@ async function fetchData(preset = null, force = false) {
                 <div class="placeholder-state" style="margin-top: 40px;">
                     <div class="placeholder-icon">⏳</div>
                     <h3>Buscando métricas do período no Meta Ads...</h3>
-                    <p>Processando contas e campanhas. A tela será atualizada automaticamente em alguns segundos.</p>
+                    <p>Processando contas e campanhas na API do Meta.</p>
                 </div>
             `;
-            if (!isPolling) {
-                isPolling = true;
+            if (pollCount < 4) {
+                pollCount++;
                 setTimeout(() => {
-                    isPolling = false;
                     fetchData(preset);
-                }, 2500);
+                }, 3000);
+            } else {
+                pollCount = 0;
+                document.getElementById('accountList').innerHTML = `<li class="loading-state">⚠️ O Meta Ads ainda está processando. <button onclick="fetchData(null, true)" class="btn-chip-sm" style="margin-top:8px;">🔄 Tentar novamente</button></li>`;
             }
             return;
         }
 
+        pollCount = 0;
         renderKPIs();
         renderSidebar();
 
