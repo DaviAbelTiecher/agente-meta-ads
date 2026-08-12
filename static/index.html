@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meta Ads CRM & Performance Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Style CSS -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navbar -->
+        <header class="navbar">
+            <div class="brand">
+                <div class="logo-icon">📊</div>
+                <div class="brand-text">
+                    <h1>Meta Ads <span>CRM Dashboard</span></h1>
+                    <p class="subtitle">Gestão Unificada de Performance e Relatórios</p>
+                </div>
+            </div>
+            
+            <div class="navbar-actions">
+                <div class="filter-period">
+                    <label for="gestorSelect">👤 Gestor:</label>
+                    <select id="gestorSelect">
+                        <option value="todos" selected>Todos os Gestores</option>
+                        <option value="Davi">Davi</option>
+                        <option value="Gabriel">Gabriel</option>
+                    </select>
+                </div>
+
+                <div class="filter-period">
+                    <label for="periodSelect">📅 Período:</label>
+                    <select id="periodSelect">
+                        <option value="last_30d" selected>Últimos 30 Dias</option>
+                        <option value="last_15d">Últimos 15 Dias</option>
+                        <option value="last_7d">Últimos 7 Dias</option>
+                        <option value="this_month">Este Mês</option>
+                    </select>
+                </div>
+                
+                <button id="btnRefresh" class="btn-primary">
+                    <span class="btn-icon">🔄</span> Sincronizar API
+                </button>
+            </div>
+        </header>
+
+        <!-- KPI Global Summary Cards -->
+        <section class="kpi-grid">
+            <div class="kpi-card glass">
+                <div class="kpi-icon gold">💰</div>
+                <div class="kpi-info">
+                    <span class="kpi-title">Investimento Total</span>
+                    <h2 id="kpiInvestimento">R$ 0,00</h2>
+                    <span class="kpi-sub">Acumulado em todas as contas</span>
+                </div>
+            </div>
+
+            <div class="kpi-card glass">
+                <div class="kpi-icon blue">📢</div>
+                <div class="kpi-info">
+                    <span class="kpi-title">Pessoas Alcançadas</span>
+                    <h2 id="kpiAlcance">0</h2>
+                    <span class="kpi-sub">Alcance total de anúncios</span>
+                </div>
+            </div>
+
+            <div class="kpi-card glass">
+                <div class="kpi-icon green">🛵</div>
+                <div class="kpi-info">
+                    <span class="kpi-title">Vendas Totais</span>
+                    <h2 id="kpiVendas">R$ 0,00</h2>
+                    <span class="kpi-sub" id="kpiPedidos">0 pedidos realizados</span>
+                </div>
+            </div>
+
+            <div class="kpi-card glass">
+                <div class="kpi-icon purple">💬</div>
+                <div class="kpi-info">
+                    <span class="kpi-title">Conversas Iniciadas</span>
+                    <h2 id="kpiConversas">0</h2>
+                    <span class="kpi-sub">Lead & Engajamento</span>
+                </div>
+            </div>
+
+            <div class="kpi-card glass">
+                <div class="kpi-icon cyan">🏢</div>
+                <div class="kpi-info">
+                    <span class="kpi-title">Contas Monitoradas</span>
+                    <h2 id="kpiContas">0</h2>
+                    <span class="kpi-sub" id="kpiStatusCount">0 Ativas / 0 Inativas</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main CRM Layout (Sidebar Accounts + Account Detail Panel) -->
+        <main class="main-content">
+            <!-- Sidebar with list of Accounts / Places -->
+            <aside class="sidebar glass">
+                <div class="sidebar-header">
+                    <h3>📍 Locais & Contas</h3>
+                    <span class="badge" id="accountCountBadge">0</span>
+                </div>
+
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="🔍 Buscar local ou ID...">
+                </div>
+
+                <div class="filter-chips">
+                    <button class="chip active" data-filter="all">Todas</button>
+                    <button class="chip" data-filter="vendas">🛒 Vendas</button>
+                    <button class="chip" data-filter="mensagens">💬 Mensagens</button>
+                    <button class="chip" data-filter="inativas">🔴 Inativas</button>
+                </div>
+
+                <ul id="accountList" class="account-list">
+                    <li class="loading-state">Carregando contas do Meta Ads...</li>
+                </ul>
+            </aside>
+
+            <!-- Detail Area for Selected Account -->
+            <section class="detail-panel glass" id="detailPanel">
+                <div class="placeholder-state">
+                    <div class="placeholder-icon">👈</div>
+                    <h3>Selecione uma conta na lista ao lado</h3>
+                    <p>Clique em qualquer local/conta para visualizar o relatório detalhado de performance.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Script JS -->
+    <script src="/static/app.js"></script>
+</body>
+</html>
