@@ -48,31 +48,20 @@ def api_metricas():
     cache_item = CACHE_METRICAS.get(date_preset)
     agora = time.time()
 
-    # Se não temos cache ainda, dispara background thread e avisa o front para aguardar
-    if not cache_item:
-        threading.Thread(target=atualizar_cache, args=(date_preset,)).start()
+    # Se não temos cache ou se foi forçada a atualização
+    if not cache_item or force_refresh or (agora - cache_item.get("timestamp", 0) > 600):
+        atualizar_cache(date_preset)
+        cache_item = CACHE_METRICAS.get(date_preset)
+
+    if cache_item:
+        return jsonify(cache_item["dados"])
+    else:
         return jsonify({
-            "loading": True,
-            "message": "Buscando e processando métricas do Meta Ads...",
-            "date_preset": date_preset,
+            "loading": False,
+            "message": "Sem dados",
             "contas": [],
-            "resumo": {
-                "total_contas": 0,
-                "contas_ativas": 0,
-                "contas_inativas": 0,
-                "investimento_total": 0.0,
-                "alcance_total": 0,
-                "vendas_totais": 0.0,
-                "pedidos_totais": 0,
-                "conversas_totais": 0
-            }
+            "resumo": {}
         })
-
-    # Se o cache está expirado (> 10 min) ou forçado
-    if force_refresh or (agora - cache_item["timestamp"] > 600):
-        threading.Thread(target=atualizar_cache, args=(date_preset,)).start()
-
-    return jsonify(cache_item["dados"])
 
 # Dispara o pré-carregamento inicial dos presets
 threading.Thread(target=pre_carregar_todos_presets).start()

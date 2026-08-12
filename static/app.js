@@ -51,10 +51,6 @@ async function fetchData(preset = null, force = false) {
         preset = document.getElementById('periodSelect').value;
     }
 
-    if (force) {
-        pollCount = 0;
-    }
-
     const btnRefresh = document.getElementById('btnRefresh');
     btnRefresh.disabled = true;
     btnRefresh.innerHTML = `<span class="btn-icon">⏳</span> Carregando...`;
@@ -70,22 +66,12 @@ async function fetchData(preset = null, force = false) {
                 <div class="placeholder-state" style="margin-top: 40px;">
                     <div class="placeholder-icon">⏳</div>
                     <h3>Buscando métricas do período no Meta Ads...</h3>
-                    <p>Processando contas e campanhas na API do Meta.</p>
+                    <p>O servidor está processando os dados na nuvem. Clique em <strong>🔄 Sincronizar API</strong> em instantes.</p>
                 </div>
             `;
-            if (pollCount < 4) {
-                pollCount++;
-                setTimeout(() => {
-                    fetchData(preset);
-                }, 3000);
-            } else {
-                pollCount = 0;
-                document.getElementById('accountList').innerHTML = `<li class="loading-state">⚠️ O Meta Ads ainda está processando. <button onclick="fetchData(null, true)" class="btn-chip-sm" style="margin-top:8px;">🔄 Tentar novamente</button></li>`;
-            }
             return;
         }
 
-        pollCount = 0;
         renderKPIs();
         renderSidebar();
 
