@@ -366,7 +366,7 @@ def obter_dados_estruturados(date_preset="last_30d"):
             nome_limpo = limpar_nome_conta(nome_bruto)
             gestor = "Davi" if account_id in DAVI_ACCOUNT_IDS else "Gabriel"
             status_num = conta.get("account_status")
-            is_ativa = (status_num == 1)
+            is_ativa = (status_num in (1, 2, 3))
             moeda = conta.get("currency", "BRL")
             simbolo_moeda = "R$" if moeda == "BRL" else f"{moeda} "
 

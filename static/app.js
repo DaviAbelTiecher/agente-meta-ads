@@ -180,8 +180,16 @@ function renderSidebar(searchQuery = '') {
 
     listEl.innerHTML = filtered.map(c => {
         const isSelected = (c.account_id === selectedAccountId) ? 'active' : '';
-        const statusText = c.is_ativa ? '🟢 Ativa' : '🔴 Inativa';
-        const statusClass = c.is_ativa ? 'active' : 'inactive';
+        
+        let statusText = '🟢 Ativa';
+        let statusClass = 'active';
+        if (c.status_num === 2 || c.status_num === 3) {
+            statusText = '🟡 Sem Saldo';
+            statusClass = 'active';
+        } else if (!c.is_ativa) {
+            statusText = '🔴 Inativa';
+            statusClass = 'inactive';
+        }
 
         let tagGoal = 'ℹ️ Sem dados';
         if (c.metricas) {
@@ -302,9 +310,12 @@ function renderDetail(id) {
     const conta = rawData.contas.find(c => c.account_id === id);
     if (!conta) return;
 
-    const statusBadge = conta.is_ativa
-        ? `<span class="status-badge active">🟢 Conta Ativa</span>`
-        : `<span class="status-badge inactive">🔴 Inativa / Bloqueada</span>`;
+    let statusBadge = `<span class="status-badge active">🟢 Conta Ativa</span>`;
+    if (conta.status_num === 2 || conta.status_num === 3) {
+        statusBadge = `<span class="status-badge active" style="background: rgba(245, 158, 11, 0.2); color: var(--accent-gold); border-color: rgba(245, 158, 11, 0.4);">🟡 Sem Saldo / Pausada (Métricas Ativas)</span>`;
+    } else if (!conta.is_ativa) {
+        statusBadge = `<span class="status-badge inactive">🔴 Inativa / Bloqueada</span>`;
+    }
 
     const activeKeys = getActiveMetrics();
 
