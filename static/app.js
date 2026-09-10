@@ -2,18 +2,324 @@ let rawData = null;
 let selectedAccountId = null;
 let currentFilter = 'all';
 
+// Estado do Seletor de Período (Mini Calendário)
+let datePickerState = {
+    preset: 'last_30d',
+    since: '',
+    until: '',
+    isCustom: false,
+    viewYear: new Date().getFullYear(),
+    viewMonth: new Date().getMonth(), // 0-11
+    selectionStep: 0 // 0: reset, 1: start selected, 2: range selected
+};
+
 document.addEventListener('DOMContentLoaded', () => {
+    initDatePicker();
     initEvents();
     fetchData();
 });
 
+function formatDateISO(dateObj) {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const d = String(dateObj.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function formatDateBR(dateStr) {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    return `${parts[2]}/${parts[1]}/${parts[0].slice(-2)}`;
+}
+
+function calculatePresetDates(preset) {
+    const today = new Date();
+    let since = new Date();
+    let until = new Date();
+
+    if (preset === 'today') {
+        since = new Date(today);
+        until = new Date(today);
+    } else if (preset === 'yesterday') {
+        since = new Date(today);
+        since.setDate(today.getDate() - 1);
+        until = new Date(since);
+    } else if (preset === 'last_7d') {
+        since = new Date(today);
+        since.setDate(today.getDate() - 7);
+        until = new Date(today);
+    } else if (preset === 'last_15d') {
+        since = new Date(today);
+        since.setDate(today.getDate() - 15);
+        until = new Date(today);
+    } else if (preset === 'last_30d') {
+        since = new Date(today);
+        since.setDate(today.getDate() - 30);
+        until = new Date(today);
+    } else if (preset === 'this_month') {
+        since = new Date(today.getFullYear(), today.getMonth(), 1);
+        until = new Date(today);
+    } else if (preset === 'last_month') {
+        since = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        until = new Date(today.getFullYear(), today.getMonth(), 0);
+    }
+
+    return {
+        since: formatDateISO(since),
+        until: formatDateISO(until)
+    };
+}
+
+function initDatePicker() {
+    // Define datas iniciais (padrão last_30d)
+    const initialDates = calculatePresetDates('last_30d');
+    datePickerState.since = initialDates.since;
+    datePickerState.until = initialDates.until;
+    datePickerState.preset = 'last_30d';
+    datePickerState.isCustom = false;
+
+    // Atualiza os inputs HTML
+    document.getElementById('startDateInput').value = datePickerState.since;
+    document.getElementById('endDateInput').value = datePickerState.until;
+
+    // Listeners do Botão Gatilho e Fechamento
+    const datePickerBtn = document.getElementById('datePickerBtn');
+    const popover = document.getElementById('datePickerPopover');
+    const closeBtn = document.getElementById('closeDatePicker');
+
+    if (datePickerBtn) {
+        datePickerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isHidden = popover.classList.contains('hidden');
+            if (isHidden) {
+                popover.classList.remove('hidden');
+                datePickerBtn.classList.add('open');
+                renderMiniCalendar();
+            } else {
+                popover.classList.add('hidden');
+                datePickerBtn.classList.remove('open');
+            }
+        });
+    }
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            popover.classList.add('hidden');
+            datePickerBtn.classList.remove('open');
+        });
+    }
+
+    // Fecha o popover ao clicar fora
+    document.addEventListener('click', (e) => {
+        const wrapper = document.querySelector('.filter-period-wrapper');
+        if (wrapper && !wrapper.contains(e.target)) {
+            popover.classList.add('hidden');
+            if (datePickerBtn) datePickerBtn.classList.remove('open');
+        }
+    });
+
+    popover.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+
+    // Preset Chips Listener
+    document.querySelectorAll('.preset-chips .date-chip').forEach(chip => {
+        chip.addEventListener('click', (e) => {
+            const presetKey = e.target.getAttribute('data-preset');
+            document.querySelectorAll('.preset-chips .date-chip').forEach(c => c.classList.remove('active'));
+            e.target.classList.add('active');
+
+            const dates = calculatePresetDates(presetKey);
+            datePickerState.preset = presetKey;
+            datePickerState.since = dates.since;
+            datePickerState.until = dates.until;
+            datePickerState.isCustom = false;
+            datePickerState.selectionStep = 0;
+
+            document.getElementById('startDateInput').value = dates.since;
+            document.getElementById('endDateInput').value = dates.until;
+
+            updateRangePreview();
+            renderMiniCalendar();
+        });
+    });
+
+    // Inputs Listener
+    document.getElementById('startDateInput').addEventListener('change', (e) => {
+        datePickerState.since = e.target.value;
+        datePickerState.isCustom = true;
+        datePickerState.preset = null;
+        document.querySelectorAll('.preset-chips .date-chip').forEach(c => c.classList.remove('active'));
+        updateRangePreview();
+        renderMiniCalendar();
+    });
+
+    document.getElementById('endDateInput').addEventListener('change', (e) => {
+        datePickerState.until = e.target.value;
+        datePickerState.isCustom = true;
+        datePickerState.preset = null;
+        document.querySelectorAll('.preset-chips .date-chip').forEach(c => c.classList.remove('active'));
+        updateRangePreview();
+        renderMiniCalendar();
+    });
+
+    // Navegação de Mês do Mini Calendário
+    document.getElementById('prevMonthBtn').addEventListener('click', () => {
+        datePickerState.viewMonth--;
+        if (datePickerState.viewMonth < 0) {
+            datePickerState.viewMonth = 11;
+            datePickerState.viewYear--;
+        }
+        renderMiniCalendar();
+    });
+
+    document.getElementById('nextMonthBtn').addEventListener('click', () => {
+        datePickerState.viewMonth++;
+        if (datePickerState.viewMonth > 11) {
+            datePickerState.viewMonth = 0;
+            datePickerState.viewYear++;
+        }
+        renderMiniCalendar();
+    });
+
+    // Botão Aplicar Período
+    document.getElementById('btnApplyDateRange').addEventListener('click', () => {
+        popover.classList.add('hidden');
+        if (datePickerBtn) datePickerBtn.classList.remove('open');
+        updateDateLabelDisplay();
+        fetchData();
+    });
+
+    updateRangePreview();
+    updateDateLabelDisplay();
+}
+
+function updateDateLabelDisplay() {
+    const displayEl = document.getElementById('selectedDateDisplay');
+    if (!displayEl) return;
+
+    if (!datePickerState.isCustom && datePickerState.preset) {
+        const mapPresetNames = {
+            'last_30d': 'Últimos 30 Dias',
+            'last_15d': 'Últimos 15 Dias',
+            'last_7d': 'Últimos 7 Dias',
+            'this_month': 'Este Mês',
+            'today': 'Hoje',
+            'yesterday': 'Ontem'
+        };
+        displayEl.innerText = mapPresetNames[datePickerState.preset] || 'Período Personalizado';
+    } else {
+        const sinceBR = formatDateBR(datePickerState.since);
+        const untilBR = formatDateBR(datePickerState.until);
+        displayEl.innerText = `${sinceBR} até ${untilBR}`;
+    }
+}
+
+function updateRangePreview() {
+    const previewEl = document.getElementById('rangePreviewText');
+    if (!previewEl) return;
+    if (datePickerState.since && datePickerState.until) {
+        const sBR = formatDateBR(datePickerState.since);
+        const uBR = formatDateBR(datePickerState.until);
+        previewEl.innerHTML = `📅 <strong>${sBR}</strong> até <strong>${uBR}</strong>`;
+    } else {
+        previewEl.innerText = 'Selecione o período';
+    }
+}
+
+function renderMiniCalendar() {
+    const monthNames = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+
+    const labelEl = document.getElementById('calendarMonthLabel');
+    if (labelEl) {
+        labelEl.innerText = `${monthNames[datePickerState.viewMonth]} ${datePickerState.viewYear}`;
+    }
+
+    const gridEl = document.getElementById('calendarDaysGrid');
+    if (!gridEl) return;
+
+    gridEl.innerHTML = '';
+
+    const firstDayOfMonth = new Date(datePickerState.viewYear, datePickerState.viewMonth, 1).getDay();
+    const daysInMonth = new Date(datePickerState.viewYear, datePickerState.viewMonth + 1, 0).getDate();
+
+    const todayISO = formatDateISO(new Date());
+
+    // Células vazias de preenchimento do início da semana
+    for (let i = 0; i < firstDayOfMonth; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.className = 'calendar-day empty';
+        gridEl.appendChild(emptyCell);
+    }
+
+    // Dias do mês
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateObj = new Date(datePickerState.viewYear, datePickerState.viewMonth, day);
+        const dateISO = formatDateISO(dateObj);
+
+        const dayCell = document.createElement('div');
+        dayCell.className = 'calendar-day';
+        dayCell.innerText = day;
+
+        if (dateISO === todayISO) {
+            dayCell.classList.add('today');
+        }
+
+        const sinceStr = datePickerState.since;
+        const untilStr = datePickerState.until;
+
+        if (dateISO === sinceStr && dateISO === untilStr) {
+            dayCell.classList.add('start-date');
+            dayCell.classList.add('end-date');
+        } else if (dateISO === sinceStr) {
+            dayCell.classList.add('start-date');
+        } else if (dateISO === untilStr) {
+            dayCell.classList.add('end-date');
+        } else if (sinceStr && untilStr && dateISO > sinceStr && dateISO < untilStr) {
+            dayCell.classList.add('in-range');
+        }
+
+        dayCell.addEventListener('click', () => {
+            handleDayClick(dateISO);
+        });
+
+        gridEl.appendChild(dayCell);
+    }
+}
+
+function handleDayClick(dateISO) {
+    document.querySelectorAll('.preset-chips .date-chip').forEach(c => c.classList.remove('active'));
+    datePickerState.isCustom = true;
+    datePickerState.preset = null;
+
+    if (datePickerState.selectionStep === 0 || datePickerState.selectionStep === 2) {
+        datePickerState.since = dateISO;
+        datePickerState.until = dateISO;
+        datePickerState.selectionStep = 1;
+    } else if (datePickerState.selectionStep === 1) {
+        if (dateISO < datePickerState.since) {
+            datePickerState.since = dateISO;
+            datePickerState.selectionStep = 1;
+        } else {
+            datePickerState.until = dateISO;
+            datePickerState.selectionStep = 2;
+        }
+    }
+
+    document.getElementById('startDateInput').value = datePickerState.since;
+    document.getElementById('endDateInput').value = datePickerState.until;
+
+    updateRangePreview();
+    renderMiniCalendar();
+}
+
 function initEvents() {
     document.getElementById('btnRefresh').addEventListener('click', () => {
-        fetchData(null, true);
-    });
-    
-    document.getElementById('periodSelect').addEventListener('change', (e) => {
-        fetchData(e.target.value);
+        fetchData(true);
     });
 
     document.getElementById('gestorSelect').addEventListener('change', () => {
@@ -35,20 +341,12 @@ function initEvents() {
     });
 }
 
-let pollCount = 0;
+let pollTimeout = null;
 
-function getFilteredAccounts() {
-    if (!rawData || !rawData.contas) return [];
-    const gestorVal = document.getElementById('gestorSelect').value;
-    if (gestorVal === 'todos') {
-        return rawData.contas;
-    }
-    return rawData.contas.filter(c => c.gestor === gestorVal);
-}
-
-async function fetchData(preset = null, force = false) {
-    if (typeof preset !== 'string' || !preset) {
-        preset = document.getElementById('periodSelect').value;
+async function fetchData(force = false) {
+    if (pollTimeout) {
+        clearTimeout(pollTimeout);
+        pollTimeout = null;
     }
 
     const btnRefresh = document.getElementById('btnRefresh');
@@ -56,8 +354,21 @@ async function fetchData(preset = null, force = false) {
     btnRefresh.innerHTML = `<span class="btn-icon">⏳</span> Carregando...`;
 
     try {
-        const url = `/api/metricas?date_preset=${preset}${force ? '&force=true' : ''}`;
+        let url = '/api/metricas';
+        if (datePickerState.isCustom && datePickerState.since && datePickerState.until) {
+            url += `?since=${datePickerState.since}&until=${datePickerState.until}`;
+        } else {
+            url += `?date_preset=${datePickerState.preset || 'last_30d'}`;
+        }
+
+        if (force) {
+            url += `${url.includes('?') ? '&' : '?'}force=true`;
+        }
+
         const res = await fetch(url);
+        if (!res.ok) {
+            throw new Error(`Servidor HTTP ${res.status}: ${res.statusText}`);
+        }
         rawData = await res.json();
 
         if (rawData.loading) {
@@ -66,9 +377,12 @@ async function fetchData(preset = null, force = false) {
                 <div class="placeholder-state" style="margin-top: 40px;">
                     <div class="placeholder-icon">⏳</div>
                     <h3>Buscando métricas do período no Meta Ads...</h3>
-                    <p>O servidor está processando os dados na nuvem. Clique em <strong>🔄 Sincronizar API</strong> em instantes.</p>
+                    <p>O servidor está processando os dados na nuvem. A tela será atualizada automaticamente em instantes.</p>
                 </div>
             `;
+            pollTimeout = setTimeout(() => {
+                fetchData();
+            }, 2500);
             return;
         }
 
@@ -84,7 +398,7 @@ async function fetchData(preset = null, force = false) {
         }
     } catch (err) {
         console.error("Erro ao buscar métricas:", err);
-        document.getElementById('accountList').innerHTML = `<li class="loading-state">❌ Erro ao carregar dados da API.</li>`;
+        document.getElementById('accountList').innerHTML = `<li class="loading-state">❌ Erro ao carregar dados da API.<br><small style="font-size:11px; opacity:0.8;">${err.message || err}</small></li>`;
     } finally {
         btnRefresh.disabled = false;
         btnRefresh.innerHTML = `<span class="btn-icon">🔄</span> Sincronizar API`;
@@ -97,6 +411,16 @@ function formatBRL(val) {
 
 function formatNum(val) {
     return new Intl.NumberFormat('pt-BR').format(val || 0);
+}
+
+function getFilteredAccounts() {
+    if (!rawData || !rawData.contas) return [];
+    const gestorSelect = document.getElementById('gestorSelect');
+    const gestorVal = gestorSelect ? gestorSelect.value : 'todos';
+    if (!gestorVal || gestorVal === 'todos') {
+        return rawData.contas;
+    }
+    return rawData.contas.filter(c => c.gestor === gestorVal);
 }
 
 function renderKPIs() {
@@ -144,7 +468,9 @@ function renderSidebar(searchQuery = '') {
     const baseContas = getFilteredAccounts();
 
     let filtered = baseContas.filter(c => {
-        const matchesSearch = c.nome.toLowerCase().includes(searchQuery) || c.account_id.includes(searchQuery);
+        const nameStr = String(c.nome || '').toLowerCase();
+        const idStr = String(c.account_id || '').toLowerCase();
+        const matchesSearch = nameStr.includes(searchQuery) || idStr.includes(searchQuery);
         
         if (!matchesSearch) return false;
 
@@ -189,7 +515,7 @@ function renderSidebar(searchQuery = '') {
             tagGoal = c.metricas.tipo_foco === 'vendas' ? '🛒 Vendas' : '💬 Mensagens';
         }
 
-        const spendStr = c.metricas ? formatBRL(c.metricas.spend) : 'R$ 0,00';
+        const saldoDisplay = c.saldo_str || (c.is_cartao ? 'Cartão' : 'R$ 0,00');
 
         return `
             <li class="account-item ${isSelected}" onclick="selectAccount('${c.account_id}')">
@@ -199,7 +525,7 @@ function renderSidebar(searchQuery = '') {
                 </div>
                 <div class="item-bottom">
                     <span class="tag-goal">${tagGoal}</span>
-                    <span class="item-spend">${spendStr}</span>
+                    <span class="item-spend">${saldoDisplay}</span>
                 </div>
             </li>
         `;
@@ -207,6 +533,7 @@ function renderSidebar(searchQuery = '') {
 }
 
 const ALL_METRIC_KEYS = [
+    { key: 'saldo_restante', label: '💳 Saldo Restante' },
     { key: 'spend', label: '💰 Investimento' },
     { key: 'reach', label: '📢 Alcance' },
     { key: 'impressions', label: '👁️ Impressões' },
@@ -248,7 +575,7 @@ function getActiveMetrics() {
         } catch (e) {}
     }
     // Por padrão exibe as métricas principais
-    return ['spend', 'reach', 'total_pedidos', 'total_vendas', 'roas', 'visitas_perfil', 'conversas_iniciadas', 'custo_por_conversa'];
+    return ['saldo_restante', 'spend', 'reach', 'total_pedidos', 'total_vendas', 'roas', 'visitas_perfil', 'conversas_iniciadas', 'custo_por_conversa'];
 }
 
 function isMetricVisible(key) {
@@ -312,6 +639,8 @@ function renderDetail(id) {
 
     const activeKeys = getActiveMetrics();
 
+    const saldoMeta = conta.saldo_str || (conta.is_cartao ? 'Cartão' : 'R$ 0,00');
+
     let contentHTML = `
         <div class="detail-header">
             <div class="detail-title">
@@ -319,6 +648,7 @@ function renderDetail(id) {
                 <div class="account-meta">
                     <span>ID da Conta: <code>act_${conta.account_id}</code></span>
                     <span>Moeda: <strong>${conta.moeda}</strong></span>
+                    <span>Saldo Restante: <strong style="color: ${conta.is_cartao ? 'var(--text-bright)' : 'var(--accent-green)'}; font-weight: 700;">${saldoMeta}</strong></span>
                 </div>
             </div>
             ${statusBadge}
@@ -374,6 +704,15 @@ function renderDetail(id) {
 
             <div class="detail-metrics-grid">
         `;
+
+        if (isMetricVisible('saldo_restante')) {
+            contentHTML += `
+                <div class="metric-box ${conta.is_cartao ? '' : 'green-glow'}" data-metric="saldo_restante">
+                    <span class="label">💳 Saldo Restante / Pagamento</span>
+                    <span class="val" style="color: ${conta.is_cartao ? 'var(--text-bright)' : 'var(--accent-green)'};">${saldoMeta}</span>
+                </div>
+            `;
+        }
 
         if (isMetricVisible('spend')) {
             contentHTML += `
@@ -546,13 +885,13 @@ function renderDetail(id) {
 
             m.campanhas.forEach(camp => {
                 const isCampVendas = camp.tipo_foco === 'vendas';
-                const hasConversas = camp.conversas_iniciadas > 0;
+                const isCampMensagem = camp.is_mensagem || (camp.custo_por_conversa > 0 && !isCampVendas);
                 const campRoasStr = (camp.roas || 0).toFixed(2).replace('.', ',');
 
-                let tagGoal = '📢 Alcance / Reconhecimento';
+                let tagGoal = '📢 Alcance / Engajamento';
                 if (isCampVendas) {
                     tagGoal = '🛒 Vendas';
-                } else if (hasConversas) {
+                } else if (isCampMensagem) {
                     tagGoal = '💬 Mensagens';
                 }
 
@@ -659,7 +998,7 @@ function renderDetail(id) {
                             </div>
                         `;
                     }
-                } else if (hasConversas) {
+                } else if (isCampMensagem) {
                     if (isMetricVisible('visitas_perfil')) {
                         contentHTML += `
                             <div>
@@ -695,9 +1034,17 @@ function renderDetail(id) {
                             </div>
                         `;
                     }
+                    if (camp.conversas_iniciadas > 0) {
+                        contentHTML += `
+                            <div>
+                                <span style="color: var(--text-muted);">💬 Conversas:</span>
+                                <div style="font-weight: 700; color: #fff;">${formatNum(camp.conversas_iniciadas)}</div>
+                            </div>
+                        `;
+                    }
                     contentHTML += `
                         <div style="grid-column: span 2;">
-                            <span style="color: var(--text-dim); font-size: 12px;">ℹ️ Campanha focada apenas em Alcance/Engajamento.</span>
+                            <span style="color: var(--text-dim); font-size: 12px;">ℹ️ Campanha de Engajamento/Perfil (Sem foco em Mensagem).</span>
                         </div>
                     `;
                 }

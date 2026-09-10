@@ -33,14 +33,84 @@
                     </select>
                 </div>
 
-                <div class="filter-period">
-                    <label for="periodSelect">📅 Período:</label>
-                    <select id="periodSelect">
-                        <option value="last_30d" selected>Últimos 30 Dias</option>
-                        <option value="last_15d">Últimos 15 Dias</option>
-                        <option value="last_7d">Últimos 7 Dias</option>
-                        <option value="this_month">Este Mês</option>
-                    </select>
+                <div class="filter-period-wrapper">
+                    <button type="button" id="datePickerBtn" class="date-picker-btn">
+                        <span class="calendar-icon">📅</span>
+                        <div class="date-picker-label">
+                            <span class="label-title">Período</span>
+                            <span id="selectedDateDisplay" class="label-value">Últimos 30 Dias</span>
+                        </div>
+                        <span class="chevron-icon" id="dateCaret">▼</span>
+                    </button>
+
+                    <!-- Mini Calendar Popover -->
+                    <div id="datePickerPopover" class="date-picker-popover glass hidden">
+                        <div class="popover-header">
+                            <h4>📅 Selecionar Período de Análise</h4>
+                            <button type="button" id="closeDatePicker" class="btn-icon-close">✕</button>
+                        </div>
+                        
+                        <div class="popover-body">
+                            <!-- Quick Presets -->
+                            <div class="preset-section">
+                                <span class="section-subtitle">Atalhos Rápidos:</span>
+                                <div class="preset-chips">
+                                    <button type="button" class="date-chip active" data-preset="last_30d">Últimos 30d</button>
+                                    <button type="button" class="date-chip" data-preset="last_15d">Últimos 15d</button>
+                                    <button type="button" class="date-chip" data-preset="last_7d">Últimos 7d</button>
+                                    <button type="button" class="date-chip" data-preset="this_month">Este Mês</button>
+                                    <button type="button" class="date-chip" data-preset="today">Hoje</button>
+                                    <button type="button" class="date-chip" data-preset="yesterday">Ontem</button>
+                                </div>
+                            </div>
+
+                            <div class="divider"></div>
+
+                            <!-- Custom Date Range Inputs & Mini Calendar -->
+                            <div class="custom-range-section">
+                                <span class="section-subtitle">Intervalo Personalizado:</span>
+                                
+                                <div class="date-inputs-row">
+                                    <div class="date-input-group">
+                                        <label for="startDateInput">De:</label>
+                                        <input type="date" id="startDateInput" class="custom-date-input">
+                                    </div>
+                                    <div class="date-input-group">
+                                        <label for="endDateInput">Até:</label>
+                                        <input type="date" id="endDateInput" class="custom-date-input">
+                                    </div>
+                                </div>
+
+                                <!-- Mini Calendar Grid -->
+                                <div class="mini-calendar-container">
+                                    <div class="mini-calendar-header">
+                                        <button type="button" id="prevMonthBtn" class="month-nav-btn">◄</button>
+                                        <span id="calendarMonthLabel" class="month-label">Agosto 2026</span>
+                                        <button type="button" id="nextMonthBtn" class="month-nav-btn">►</button>
+                                    </div>
+                                    <div class="mini-calendar-grid">
+                                        <div class="day-name">Dom</div>
+                                        <div class="day-name">Seg</div>
+                                        <div class="day-name">Ter</div>
+                                        <div class="day-name">Qua</div>
+                                        <div class="day-name">Qui</div>
+                                        <div class="day-name">Sex</div>
+                                        <div class="day-name">Sáb</div>
+                                    </div>
+                                    <div id="calendarDaysGrid" class="mini-calendar-days">
+                                        <!-- Days rendered by JS -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="popover-footer">
+                            <span class="range-preview-text" id="rangePreviewText">Selecione o período</span>
+                            <button type="button" id="btnApplyDateRange" class="btn-primary-sm">
+                                🚀 Aplicar Período
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 
                 <button id="btnRefresh" class="btn-primary">

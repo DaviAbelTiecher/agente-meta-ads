@@ -13,15 +13,20 @@ load_dotenv(override=True)
 
 GRAPH_API_URL = "https://graph.facebook.com/v19.0"
 
-def obter_parametro_data(date_preset):
-    """Retorna a string de parâmetro para chamadas do Meta API considerando interval de datas customizado para last_15d."""
-    if date_preset == "last_15d":
+def obter_parametro_data(date_preset="last_30d", since=None, until=None):
+    """Retorna a string de parâmetro para chamadas do Meta API considerando intervalo de datas customizado ou preset."""
+    if since and until:
+        time_range_json = f'{{"since":"{since}","until":"{until}"}}'
+        return f"&time_range={time_range_json}", f"insights.time_range({time_range_json})"
+    elif date_preset == "last_15d":
         today = datetime.date.today()
-        since = (today - datetime.timedelta(days=15)).strftime("%Y-%m-%d")
-        until = today.strftime("%Y-%m-%d")
-        return f"&time_range={{\"since\":\"{since}\",\"until\":\"{until}\"}}", f"insights.time_range({{\"since\":\"{since}\",\"until\":\"{until}\"}})"
+        s = (today - datetime.timedelta(days=15)).strftime("%Y-%m-%d")
+        u = today.strftime("%Y-%m-%d")
+        time_range_json = f'{{"since":"{s}","until":"{u}"}}'
+        return f"&time_range={time_range_json}", f"insights.time_range({time_range_json})"
     else:
-        return f"&date_preset={date_preset}", f"insights.date_preset({date_preset})"
+        preset = date_preset if date_preset else "last_30d"
+        return f"&date_preset={preset}", f"insights.date_preset({preset})"
 
 def obter_tokens():
     """Retorna um dicionário com todos os tokens do Meta encontrados no .env."""
@@ -54,9 +59,9 @@ def extrair_acao(actions, tipos_acao):
             return float(acao.get("value", 0))
     return 0
 
-def buscar_campanhas_conta(account_id, token, date_preset="last_30d"):
+def buscar_campanhas_conta(account_id, token, date_preset="last_30d", since=None, until=None):
     """Busca as campanhas da conta e calcula o ROAS e métricas exatas de cada campanha individual."""
-    param_ins, param_camp_ins = obter_parametro_data(date_preset)
+    param_ins, param_camp_ins = obter_parametro_data(date_preset, since=since, until=until)
     fields = "spend,reach,impressions,cpm,cpc,ctr,frequency,inline_link_clicks,actions,action_values,purchase_roas,cost_per_action_type"
     url = (
         f"{GRAPH_API_URL}/act_{account_id}/campaigns"
@@ -119,15 +124,6 @@ def buscar_campanhas_conta(account_id, token, date_preset="last_30d"):
 
         if spend == 0 and total_pedidos == 0 and total_vendas == 0 and conversas_iniciadas == 0 and impressions == 0:
             continue
-        custo_por_conversa = 0.0
-        if conversas_iniciadas > 0:
-            custo_meta = extrair_acao(cost_per_action, tipos_conversas)
-            custo_por_conversa = custo_meta if custo_meta > 0 else (spend / conversas_iniciadas)
-
-        roas = extrair_acao(purchase_roas, tipos_compras)
-        if roas == 0 and spend > 0 and total_vendas > 0:
-            roas = total_vendas / spend
-
         nome_lower = camp.get("name", "").lower()
         is_vendas = (
             total_pedidos > 0 or 
@@ -142,12 +138,44 @@ def buscar_campanhas_conta(account_id, token, date_preset="last_30d"):
         )
         tipo_foco = "vendas" if is_vendas else "mensagens"
 
+        # Identifica se a campanha tem objetivo real de MENSAGEM (WhatsApp/Direct/Messenger)
+        termos_msg = ["whats", "whatsapp", "msg", "mensagem", "mensagens", "direct", "conversa", "chat"]
+        tem_kw_msg = any(t in nome_lower for t in termos_msg)
+        
+        termos_nao_msg = ["perfil", "[ig]", "instagram", "seguidores", "alcance", "awareness", "tráfego", "trafego", "engajamento][ig", "engajamento [ig]"]
+        tem_kw_nao_msg = any(t in nome_lower for t in termos_nao_msg)
+        
+        custo_meta_msg = extrair_acao(cost_per_action, tipos_conversas)
+
+        if not is_vendas:
+            if tem_kw_msg:
+                is_mensagem = True
+            elif custo_meta_msg > 0 and not tem_kw_nao_msg:
+                is_mensagem = True
+            elif tem_kw_nao_msg:
+                is_mensagem = False
+            elif camp.get("objective") == "OUTCOME_ENGAGEMENT" and conversas_iniciadas > 0:
+                is_mensagem = True
+            else:
+                is_mensagem = False
+        else:
+            is_mensagem = False
+
+        custo_por_conversa = 0.0
+        if is_mensagem and conversas_iniciadas > 0:
+            custo_por_conversa = custo_meta_msg if custo_meta_msg > 0 else (spend / conversas_iniciadas)
+
+        roas = extrair_acao(purchase_roas, tipos_compras)
+        if roas == 0 and spend > 0 and total_vendas > 0:
+            roas = total_vendas / spend
+
         campanhas.append({
             "id": camp.get("id"),
             "nome": camp.get("name"),
             "status": camp.get("status"),
             "objective": camp.get("objective"),
             "tipo_foco": tipo_foco,
+            "is_mensagem": is_mensagem,
             "spend": spend,
             "reach": reach,
             "impressions": impressions,
@@ -170,9 +198,9 @@ def buscar_campanhas_conta(account_id, token, date_preset="last_30d"):
     campanhas.sort(key=lambda x: -x["spend"])
     return campanhas
 
-def buscar_metricas_conta(account_id, token, date_preset="last_30d"):
+def buscar_metricas_conta(account_id, token, date_preset="last_30d", since=None, until=None):
     """Busca insights (investimento, alcance, visitas, conversas, pedidos, vendas, ROAS) de uma conta de anúncio."""
-    param_ins, param_camp_ins = obter_parametro_data(date_preset)
+    param_ins, param_camp_ins = obter_parametro_data(date_preset, since=since, until=until)
     fields = "spend,reach,impressions,cpm,cpc,ctr,frequency,inline_link_clicks,actions,action_values,purchase_roas,cost_per_action_type"
     url = (
         f"{GRAPH_API_URL}/act_{account_id}/insights"
@@ -189,7 +217,7 @@ def buscar_metricas_conta(account_id, token, date_preset="last_30d"):
     except Exception as e:
         return None, f"Erro de conexão com Meta API: {str(e)}"
 
-    campanhas = buscar_campanhas_conta(account_id, token, date_preset=date_preset)
+    campanhas = buscar_campanhas_conta(account_id, token, date_preset=date_preset, since=since, until=until)
 
     if not dados:
         spend = sum(c["spend"] for c in campanhas)
@@ -267,12 +295,23 @@ def buscar_metricas_conta(account_id, token, date_preset="last_30d"):
         total_vendas = extrair_acao(action_values, tipos_compras)
         roas = 0.0
 
-    # Recalcula o Custo por Conversa da conta ignorando campanhas puras de alcance (sem conversas)
+    # Recalcula o Custo por Conversa da conta considerando APENAS campanhas com objetivo real de MENSAGEM
     if conversas_iniciadas > 0:
-        camps_msg = [c for c in campanhas if c["conversas_iniciadas"] > 0]
+        camps_msg = [c for c in campanhas if c.get("is_mensagem") and c["conversas_iniciadas"] > 0]
         if camps_msg:
             investimento_msg = sum(c["spend"] for c in camps_msg)
-            custo_por_conversa = investimento_msg / conversas_iniciadas
+            conversas_msg = sum(c["conversas_iniciadas"] for c in camps_msg)
+            custo_por_conversa = investimento_msg / conversas_msg if conversas_msg > 0 else 0.0
+        else:
+            camps_sem_vendas = [c for c in campanhas if c["tipo_foco"] != "vendas" and c["conversas_iniciadas"] > 0 and not any(kw in (c["nome"] or "").lower() for kw in ["perfil", "[ig]", "instagram", "seguidores", "alcance", "awareness"])]
+            if camps_sem_vendas:
+                investimento_msg = sum(c["spend"] for c in camps_sem_vendas)
+                conversas_msg = sum(c["conversas_iniciadas"] for c in camps_sem_vendas)
+                custo_por_conversa = investimento_msg / conversas_msg if conversas_msg > 0 else 0.0
+            else:
+                custo_por_conversa = 0.0
+    else:
+        custo_por_conversa = 0.0
 
     return {
         "tipo_foco": tipo_foco,
@@ -314,7 +353,13 @@ DAVI_ACCOUNT_IDS = {
     "907450422127857",   # CABANA FAZENDA RURAL
     "1059727207234978",  # BARRA BONITA
     "1371633781402796",  # CABANA SAFIRA
-    "749845321489148"    # CHACARA BONS VENTOS
+    "749845321489148",   # CHACARA BONS VENTOS
+    "3005734976424838",  # Casa Durigan
+    "1043217331876050"   # DOYA
+}
+
+EXCLUDED_ACCOUNT_IDS = {
+    "1189618016437224"   # Conta Inativa/Bloqueada removida pelo usuário
 }
 
 def limpar_nome_conta(nome):
@@ -323,33 +368,36 @@ def limpar_nome_conta(nome):
     nome_limpo = re.sub(r'^(CA\s*[-–—:]\s*)+', '', nome, flags=re.IGNORECASE).strip()
     return nome_limpo if nome_limpo else nome
 
-def obter_dados_estruturados(date_preset="last_30d"):
+from concurrent.futures import ThreadPoolExecutor
+
+def processar_conta_individual(item_conta, token, date_preset, since, until):
+    if item_conta["is_ativa"]:
+        metricas, err = buscar_metricas_conta(item_conta["account_id"], token, date_preset=date_preset, since=since, until=until)
+        if err:
+            item_conta["erro"] = err
+        else:
+            item_conta["metricas"] = metricas
+    else:
+        item_conta["erro"] = f"Conta Inativa/Bloqueada (Código {item_conta['status_num']})"
+    return item_conta
+
+def obter_dados_estruturados(date_preset="last_30d", since=None, until=None):
     """
     Consolida todas as contas e métricas do Meta Ads organizadas para JSON (API/Dashboard).
+    Utiliza ThreadPoolExecutor para buscar dados de múltiplas contas em paralelo.
     """
     load_dotenv(override=True)
     tokens = obter_tokens()
     if not tokens:
         return {"error": "Nenhum token encontrado no arquivo .env", "contas": [], "resumo": {}}
 
-    contas = []
+    contas_base = []
     contas_processadas = set()
 
-    resumo = {
-        "total_contas": 0,
-        "contas_ativas": 0,
-        "contas_inativas": 0,
-        "investimento_total": 0.0,
-        "alcance_total": 0,
-        "vendas_totais": 0.0,
-        "pedidos_totais": 0,
-        "conversas_totais": 0
-    }
-
     for token in tokens.values():
-        url = f"{GRAPH_API_URL}/me/adaccounts?fields=name,account_id,account_status,currency&access_token={token}"
+        url = f"{GRAPH_API_URL}/me/adaccounts?fields=name,account_id,account_status,currency,is_prepay_account,funding_source_details,balance&access_token={token}"
         try:
-            res = requests.get(url)
+            res = requests.get(url, timeout=10)
             if res.status_code != 200:
                 continue
             dados_contas = res.json().get("data", [])
@@ -358,7 +406,7 @@ def obter_dados_estruturados(date_preset="last_30d"):
 
         for conta in dados_contas:
             account_id = str(conta.get("account_id"))
-            if account_id in contas_processadas:
+            if account_id in contas_processadas or account_id in EXCLUDED_ACCOUNT_IDS:
                 continue
             contas_processadas.add(account_id)
 
@@ -370,11 +418,32 @@ def obter_dados_estruturados(date_preset="last_30d"):
             moeda = conta.get("currency", "BRL")
             simbolo_moeda = "R$" if moeda == "BRL" else f"{moeda} "
 
-            resumo["total_contas"] += 1
-            if is_ativa:
-                resumo["contas_ativas"] += 1
-            else:
-                resumo["contas_inativas"] += 1
+            is_prepay = conta.get("is_prepay_account", False)
+            funding_details = conta.get("funding_source_details", {}) or {}
+            balance_raw = conta.get("balance", "0")
+
+            is_cartao = (not is_prepay) or (funding_details.get("type") == 1)
+
+            saldo_restante = 0.0
+            saldo_str = "Cartão"
+
+            if not is_cartao:
+                display_str = funding_details.get("display_string", "")
+                match = re.search(r"R\$\s*([\d\.,]+)", display_str)
+                if match:
+                    val_str = match.group(1).replace(".", "").replace(",", ".")
+                    try:
+                        saldo_restante = float(val_str)
+                        saldo_str = f"{simbolo_moeda} {formatar_moeda(saldo_restante)}"
+                    except ValueError:
+                        saldo_str = "Cartão"
+                else:
+                    try:
+                        bal_val = float(balance_raw) / 100.0
+                        saldo_restante = bal_val
+                        saldo_str = f"{simbolo_moeda} {formatar_moeda(saldo_restante)}"
+                    except (ValueError, TypeError):
+                        saldo_str = "Cartão"
 
             item_conta = {
                 "account_id": account_id,
@@ -385,37 +454,67 @@ def obter_dados_estruturados(date_preset="last_30d"):
                 "is_ativa": is_ativa,
                 "moeda": moeda,
                 "simbolo_moeda": simbolo_moeda,
+                "is_cartao": is_cartao,
+                "saldo_restante": saldo_restante,
+                "saldo_str": saldo_str,
+                "token": token,
                 "metricas": None,
                 "erro": None
             }
+            contas_base.append(item_conta)
 
-            if is_ativa:
-                metricas, err = buscar_metricas_conta(account_id, token, date_preset=date_preset)
-                if err:
-                    item_conta["erro"] = err
+    contas = []
+    resumo = {
+        "total_contas": len(contas_base),
+        "contas_ativas": 0,
+        "contas_inativas": 0,
+        "investimento_total": 0.0,
+        "alcance_total": 0,
+        "vendas_totais": 0.0,
+        "pedidos_totais": 0,
+        "conversas_totais": 0
+    }
+
+    # Busca métricas em paralelo com ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=15) as executor:
+        futures = [
+            executor.submit(processar_conta_individual, item, item["token"], date_preset, since, until)
+            for item in contas_base
+        ]
+        for future in futures:
+            try:
+                item_processado = future.result()
+                # Remove o token do objeto JSON final por segurança
+                item_processado.pop("token", None)
+                contas.append(item_processado)
+
+                if item_processado["is_ativa"]:
+                    resumo["contas_ativas"] += 1
+                    m = item_processado.get("metricas")
+                    if m:
+                        resumo["investimento_total"] += m.get("spend", 0.0)
+                        resumo["alcance_total"] += m.get("reach", 0)
+                        resumo["vendas_totais"] += m.get("total_vendas", 0.0)
+                        resumo["pedidos_totais"] += int(m.get("total_pedidos", 0))
+                        resumo["conversas_totais"] += int(m.get("conversas_iniciadas", 0))
                 else:
-                    item_conta["metricas"] = metricas
-                    resumo["investimento_total"] += metricas.get("spend", 0.0)
-                    resumo["alcance_total"] += metricas.get("reach", 0)
-                    resumo["vendas_totais"] += metricas.get("total_vendas", 0.0)
-                    resumo["pedidos_totais"] += int(metricas.get("total_pedidos", 0))
-                    resumo["conversas_totais"] += int(metricas.get("conversas_iniciadas", 0))
-            else:
-                item_conta["erro"] = f"Conta Inativa/Bloqueada (Código {status_num})"
-
-            contas.append(item_conta)
+                    resumo["contas_inativas"] += 1
+            except Exception as e:
+                pass
 
     # Ordena contas em ordem alfabética por nome limpo
     contas.sort(key=lambda x: x["nome"].lower())
 
     return {
         "date_preset": date_preset,
+        "since": since,
+        "until": until,
         "resumo": resumo,
         "contas": contas
     }
 
-def relatorio_meta_ads(date_preset="last_30d"):
-    dados = obter_dados_estruturados(date_preset=date_preset)
+def relatorio_meta_ads(date_preset="last_30d", since=None, until=None):
+    dados = obter_dados_estruturados(date_preset=date_preset, since=since, until=until)
     if "error" in dados:
         return f"❌ ERRO: {dados['error']}"
 
