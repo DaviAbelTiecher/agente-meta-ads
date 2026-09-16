@@ -2,7 +2,7 @@ import os
 import threading
 import time
 from flask import Flask, jsonify, request, send_from_directory
-from agente import obter_dados_estruturados
+from agente import obter_dados_estruturados, analisar_dados_ia
 
 app = Flask(__name__, static_folder="static", template_folder="static")
 
@@ -73,6 +73,32 @@ def api_metricas():
             "resumo": {}
         })
 
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
+    req_data = request.get_json() or {}
+    mensagem = req_data.get("message", "").strip()
+    date_preset = req_data.get("date_preset", "last_30d")
+    since = req_data.get("since")
+    until = req_data.get("until")
+    account_id = req_data.get("account_id")
+
+    if not mensagem:
+        return jsonify({"answer": "Por favor, digite uma pergunta."}), 400
+
+    if since and until:
+        cache_key = f"custom_{since}_{until}"
+    else:
+        cache_key = date_preset if date_preset in ["today", "yesterday", "last_7d", "last_15d", "last_30d", "this_month", "last_month"] else "last_30d"
+
+    cache_item = CACHE_METRICAS.get(cache_key)
+    if cache_item and cache_item.get("dados"):
+        dados = cache_item["dados"]
+    else:
+        dados = obter_dados_estruturados(date_preset=date_preset, since=since, until=until)
+
+    resposta = analisar_dados_ia(dados, mensagem, account_id=account_id)
+    return jsonify({"answer": resposta})
+
 # Dispara o pré-carregamento inicial dos dados
 threading.Thread(target=pre_carregar_inicial).start()
 
@@ -80,3 +106,4 @@ if __name__ == "__main__":
     porta = int(os.environ.get("PORT", 5000))
     print(f"\n🚀 Servidor CRM Meta Ads rodando em: http://localhost:{porta}\n")
     app.run(host="0.0.0.0", port=porta, debug=True, use_reloader=False)
+

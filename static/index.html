@@ -204,7 +204,61 @@
         </main>
     </div>
 
+    <!-- Floating AI Chat Widget -->
+    <div id="aiChatWidget" class="ai-chat-widget">
+        <!-- Floating Trigger Button -->
+        <button type="button" id="aiChatToggleBtn" class="ai-chat-toggle-btn" title="Abrir Assistente de IA">
+            <span class="ai-btn-icon">🤖</span>
+            <span class="ai-btn-label">Assistente IA</span>
+            <span class="ai-btn-pulse"></span>
+        </button>
+
+        <!-- Floating Glassmorphism Chat Window -->
+        <div id="aiChatWindow" class="ai-chat-window glass hidden">
+            <div class="ai-chat-header">
+                <div class="ai-chat-title">
+                    <span class="ai-avatar">🤖</span>
+                    <div>
+                        <h4>Assistente IA Meta Ads</h4>
+                        <span class="ai-status">● Online | Análise de Tráfego</span>
+                    </div>
+                </div>
+                <div class="ai-chat-actions">
+                    <button type="button" id="aiChatClearBtn" class="ai-icon-btn" title="Limpar conversa">🗑️</button>
+                    <button type="button" id="aiChatCloseBtn" class="ai-icon-btn" title="Fechar">✕</button>
+                </div>
+            </div>
+
+            <!-- Scrollable Message List -->
+            <div id="aiChatMessages" class="ai-chat-messages">
+                <div class="ai-msg bot-msg">
+                    <div class="msg-avatar">🤖</div>
+                    <div class="msg-content">
+                        Olá! Sou seu assistente de Inteligência Artificial do Meta Ads. 👋<br><br>
+                        Como posso te ajudar a analisar seus resultados hoje?
+                    </div>
+                </div>
+
+                <!-- Quick Action Chips -->
+                <div class="ai-quick-chips">
+                    <button type="button" class="quick-chip" data-prompt="Os resultados do período estão satisfatórios?">📊 Desempenho Geral</button>
+                    <button type="button" class="quick-chip" data-prompt="Quais contas estão com resultado meio fraco?">⚠️ Contas Fracas</button>
+                    <button type="button" class="quick-chip" data-prompt="Quais são as melhores contas do período?">🏆 Melhores Contas</button>
+                </div>
+            </div>
+
+            <!-- Input Bar -->
+            <div class="ai-chat-input-container">
+                <input type="text" id="aiChatInput" placeholder="Pergunte sobre uma conta, métrica ou análise..." autocomplete="off">
+                <button type="button" id="aiChatSendBtn" class="ai-send-btn" title="Enviar mensagem">
+                    <span>🚀</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Script JS -->
     <script src="/static/app.js"></script>
 </body>
 </html>
+

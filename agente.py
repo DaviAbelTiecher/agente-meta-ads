@@ -572,6 +572,277 @@ def relatorio_meta_ads(date_preset="last_30d", since=None, until=None):
 
     return "\n".join(relatorio)
 
+
+def gerar_analise_ia_fallback(dados, mensagem, account_id=None):
+    """
+    Motor analítico interno de fallback para responder perguntas sobre o Dashboard de Meta Ads.
+    Estrutura a resposta obrigatoriamente nos 3 blocos visuais (🚨, 📊, 💡).
+    """
+    if not dados or "contas" not in dados:
+        return (
+            "🚨 **Alerta / Diagnóstico Principal**\n"
+            "Não foi possível obter os dados das contas no momento.\n\n"
+            "📊 **Métricas Críticas**\n"
+            "Sem métricas disponíveis.\n\n"
+            "💡 **Recomendação Prática**\n"
+            "Por favor, sincronize novamente a API ou atualize a página para recarregar o dashboard."
+        )
+
+    msg_lower = mensagem.lower().strip()
+    resumo = dados.get("resumo", {})
+    contas = dados.get("contas", [])
+    contas_ativas = [c for c in contas if c.get("is_ativa") and c.get("metricas")]
+
+    # Busca especificamente a conta informada via account_id ou pelo texto da mensagem
+    conta_encontrada = None
+    if account_id:
+        conta_encontrada = next((c for c in contas if str(c.get("account_id")) == str(account_id)), None)
+
+    if not conta_encontrada:
+        for c in contas:
+            nome_c = c.get("nome", "").lower()
+            nome_orig = c.get("nome_original", "").lower()
+            termos_mensagem = [
+                w for w in msg_lower.split() 
+                if len(w) > 3 and w not in ["métricas", "metrica", "resultado", "resultados", "desempenho", "conta", "contas", "passa", "quais", "quaisquer", "como"]
+            ]
+            if any(t in nome_c or t in nome_orig for t in termos_mensagem):
+                conta_encontrada = c
+                break
+
+    if conta_encontrada:
+        c = conta_encontrada
+        m = c.get("metricas") or {}
+        moeda = c.get("simbolo_moeda", "R$")
+        spend = m.get("spend", 0.0)
+        ctr = m.get("ctr", 0.0)
+        cpc = m.get("cpc", 0.0)
+        cpm = m.get("cpm", 0.0)
+        roas = m.get("roas", 0.0)
+        vendas = m.get("total_vendas", 0.0)
+        pedidos = m.get("total_pedidos", 0)
+        conversas = m.get("conversas_iniciadas", 0)
+        cpa = m.get("custo_por_conversa", 0.0)
+        foco = m.get("tipo_foco", "mensagens")
+
+        diag_alertas = []
+        if ctr > 0 and ctr < 1.0:
+            diag_alertas.append(f"⚠️ CTR abaixo de 1% ({ctr:.2f}%) indica fadiga nos criativos ou baixo engajamento do público.")
+        if foco == "vendas" and spend > 50 and roas == 0:
+            diag_alertas.append(f"🚨 ROAS Zerado ({roas:.2f}x) com investimento de {moeda} {formatar_moeda(spend)}. Nenhuma venda registrada.")
+        if foco == "mensagens" and spend > 30 and conversas == 0:
+            diag_alertas.append(f"🚨 Nenhuma conversa iniciada apesar do investimento de {moeda} {formatar_moeda(spend)}.")
+
+        diagnostico = " ".join(diag_alertas) if diag_alertas else f"A conta {c['nome']} está operando normalmente com foco em {'Vendas' if foco == 'vendas' else 'Mensagens'}."
+
+        metricas_txt = [
+            f"• Conta: {c['nome']} (ID: act_{c['account_id']})",
+            f"• Investimento Total: {moeda} {formatar_moeda(spend)}",
+            f"• CTR: {ctr:.2f}% | CPC: {moeda} {formatar_moeda(cpc)} | CPM: {moeda} {formatar_moeda(cpm)}"
+        ]
+        if foco == "vendas":
+            metricas_txt.append(f"• Vendas Totais: {moeda} {formatar_moeda(vendas)} ({pedidos} pedidos)")
+            metricas_txt.append(f"• ROAS Geral da Conta: {roas:.2f}x".replace(".", ","))
+        else:
+            metricas_txt.append(f"• Conversas Iniciadas: {formatar_numero(conversas)}")
+            metricas_txt.append(f"• Custo por Conversa (CPA): {moeda} {formatar_moeda(cpa)}")
+
+        recom_txt = []
+        if ctr < 1.0 and ctr > 0:
+            recom_txt.append("• Teste novas variações de criativos (vídeos curtos ou novas imagens) para elevar o CTR acima de 1,5%.")
+        if foco == "vendas" and roas == 0:
+            recom_txt.append("• Revise o funil de vendas, checkout e precificação das campanhas de e-commerce.")
+        if foco == "mensagens" and conversas == 0:
+            recom_txt.append("• Verifique o link do WhatsApp/Direct e os botões de chamada para ação (CTA) dos anúncios.")
+        if not recom_txt:
+            recom_txt.append("• Mantenha a otimização contínua das campanhas e acompanhe a Frequência e o CTR diariamente.")
+
+        return (
+            f"🚨 **Alerta / Diagnóstico Principal**\n{diagnostico}\n\n"
+            f"📊 **Métricas Críticas**\n" + "\n".join(metricas_txt) + "\n\n"
+            f"💡 **Recomendação Prática**\n" + "\n".join(recom_txt)
+        )
+
+    # Diagnóstico Geral
+    tot_inv = resumo.get("investimento_total", 0.0)
+    vendas_tot = resumo.get("vendas_totais", 0.0)
+    pedidos_tot = resumo.get("pedidos_totais", 0)
+    conv_tot = resumo.get("conversas_totais", 0)
+    tot_contas = resumo.get("total_contas", len(contas))
+    ativas_cnt = resumo.get("contas_ativas", len(contas_ativas))
+    roas_geral = (vendas_tot / tot_inv) if tot_inv > 0 and vendas_tot > 0 else 0.0
+
+    return (
+        f"🚨 **Alerta / Diagnóstico Principal**\n"
+        f"Análise consolidada do dashboard ({ativas_cnt} contas ativas de {tot_contas} monitoradas). "
+        f"{'Desempenho de vendas ativo.' if vendas_tot > 0 else 'Foco principal em geração de mensagens e captação de clientes.'}\n\n"
+        f"📊 **Métricas Críticas**\n"
+        f"• Investimento Total no Período: R$ {formatar_moeda(tot_inv)}\n"
+        f"• Vendas Totais: R$ {formatar_moeda(vendas_tot)} ({pedidos_tot} pedidos | ROAS Médio: {roas_geral:.2f}x)\n"
+        f"• Conversas Totais no WhatsApp: {formatar_numero(conv_tot)}\n\n"
+        f"💡 **Recomendação Prática**\n"
+        f"• Selecione uma conta específica na barra lateral da dashboard para obter diagnósticos cirúrgicos de CTR, CPC, CPA e ROAS por campanha."
+    )
+
+
+def analisar_dados_ia(dados, mensagem_usuario, account_id=None):
+    """
+    Processa a mensagem do usuário utilizando a API do Gemini com a persona de Gestor de Tráfego Sênior
+    e Especialista em Data Analytics. Injeta dados dinâmicos em JSON da conta selecionada e do período,
+    com formato de resposta obrigatório em 3 blocos visuais e temperature entre 0.5 e 0.7 (0.6).
+    """
+    import json
+
+    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        return gerar_analise_ia_fallback(dados, mensagem_usuario, account_id=account_id)
+
+    # 1. Estruturação dos Dados Dinâmicos em JSON
+    dados_dinamicos = {
+        "periodo": {
+            "date_preset": dados.get("date_preset"),
+            "since": dados.get("since"),
+            "until": dados.get("until")
+        },
+        "resumo_geral": dados.get("resumo", {}),
+        "conta_selecionada": None,
+        "contas": []
+    }
+
+    conta_selecionada_obj = None
+    contas_list = dados.get("contas", []) if dados else []
+
+    for c in contas_list:
+        m = c.get("metricas") or {}
+        nicho_info = c.get("nicho_info", {})
+
+        c_data = {
+            "account_id": c.get("account_id"),
+            "nome": c.get("nome"),
+            "gestor": c.get("gestor"),
+            "status_conta": "Ativa" if c.get("is_ativa") else f"Inativa ({c.get('erro')})",
+            "is_ativa": c.get("is_ativa"),
+            "moeda": c.get("moeda", "BRL"),
+            "saldo_restante": c.get("saldo_str"),
+            "nicho": nicho_info.get("nicho", "GERAL"),
+            "investimento_total": m.get("spend", 0.0),
+            "vendas_totais": m.get("total_vendas", 0.0),
+            "pedidos_totais": m.get("total_pedidos", 0),
+            "conversas_totais": m.get("conversas_iniciadas", 0),
+            "custo_por_conversa": m.get("custo_por_conversa", 0.0),
+            "reach": m.get("reach", 0),
+            "impressions": m.get("impressions", 0),
+            "ctr": m.get("ctr", 0.0),
+            "cpc": m.get("cpc", 0.0),
+            "cpm": m.get("cpm", 0.0),
+            "roas": m.get("roas", 0.0),
+            "visitas_perfil": m.get("visitas_perfil", 0),
+            "leads": m.get("leads", 0),
+            "foco_principal": m.get("tipo_foco", "mensagens"),
+            "campanhas": []
+        }
+
+        for camp in m.get("campanhas", []):
+            c_data["campanhas"].append({
+                "nome": camp.get("nome"),
+                "status": camp.get("status"),
+                "objective": camp.get("objective"),
+                "foco": camp.get("tipo_foco"),
+                "spend": camp.get("spend", 0.0),
+                "reach": camp.get("reach", 0),
+                "impressions": camp.get("impressions", 0),
+                "ctr": camp.get("ctr", 0.0),
+                "cpc": camp.get("cpc", 0.0),
+                "cpm": camp.get("cpm", 0.0),
+                "cliques_link": camp.get("cliques_link", 0),
+                "conversas": camp.get("conversas_iniciadas", 0),
+                "custo_por_conversa": camp.get("custo_por_conversa", 0.0),
+                "pedidos": camp.get("total_pedidos", 0),
+                "vendas": camp.get("total_vendas", 0.0),
+                "roas": camp.get("roas", 0.0),
+                "visitas_perfil": camp.get("visitas_perfil", 0),
+                "leads": camp.get("leads", 0)
+            })
+
+        dados_dinamicos["contas"].append(c_data)
+
+        if account_id and str(c.get("account_id")) == str(account_id):
+            conta_selecionada_obj = c_data
+
+    if conta_selecionada_obj:
+        dados_dinamicos["conta_selecionada"] = conta_selecionada_obj
+
+    json_dados_str = json.dumps(dados_dinamicos, ensure_ascii=False, indent=2)
+
+    # 2. System Prompt com Persona, Diretrizes e Formato Obrigatório
+    system_instruction_text = (
+        "Você é um Gestor de Tráfego Sênior e Especialista em Data Analytics (focado em ROAS, CPA e otimização de campanhas de Meta Ads).\n"
+        "Sua função é realizar diagnósticos altamente analíticos, perspicazes e práticos cruzando as métricas da dashboard.\n\n"
+        "DIRETRIZES DE ANÁLISE:\n"
+        "1. Cruzar métricas de CTR: Alerte imediatamente se o CTR estiver abaixo de 1% (alerta crítico de criativo desgastado ou público sem fit).\n"
+        "2. Variações de CPC e CPM: Analise se o custo por clique (CPC) ou por mil impressões (CPM) está desproporcional.\n"
+        "3. Desvios de CPA: Avalie o Custo por Aquisição / Custo por conversa em relação ao foco da conta.\n"
+        "4. ROAS Zerado com Gasto Alto: Identifique e alerte sobre campanhas de vendas com investimento alto e ROAS 0.\n"
+        "5. Considerar objetivo da campanha e nicho do cliente sem usar regras estáticas simplistas.\n\n"
+        "FORMATO DE RESPOSTA OBRIGATÓRIO:\n"
+        "Você DEVE SEMPRE estruturar a resposta estritamente utilizando os 3 blocos visuais abaixo:\n\n"
+        "🚨 **Alerta / Diagnóstico Principal**\n"
+        "[Apresente o diagnóstico principal identificando problemas críticos (CTR < 1%, ROAS zerado, CPA alto, variações de CPM/CPC) ou destacando a boa performance.]\n\n"
+        "📊 **Métricas Críticas**\n"
+        "[Liste os números exatos extraídos dos dados em JSON: Spend, CTR, CPC, CPM, CPA, ROAS, Vendas, Conversas, etc.]\n\n"
+        "💡 **Recomendação Prática**\n"
+        "[Dê sugestões diretas e acionáveis: trocar criativo, pausar campanha fraca, reajustar público, otimizar orçamento.]"
+    )
+
+    nome_conta_sel = conta_selecionada_obj['nome'] if conta_selecionada_obj else 'Nenhuma específica selecionada (Visão Geral)'
+    prompt_usuario = (
+        f"DADOS REAIS DA DASHBOARD META ADS (JSON):\n"
+        f"```json\n{json_dados_str}\n```\n\n"
+        f"CONTA ATUALMENTE SELECIONADA NA DASHBOARD: {nome_conta_sel}\n\n"
+        f"PERGUNTA DO USUÁRIO: {mensagem_usuario}\n\n"
+        f"Responda ao usuário obrigatoriamente estruturado nos 3 blocos visuais: 🚨 Alerta / Diagnóstico Principal, 📊 Métricas Críticas e 💡 Recomendação Prática."
+    )
+
+    payload = {
+        "systemInstruction": {
+            "parts": [{"text": system_instruction_text}]
+        },
+        "contents": [
+            {
+                "parts": [{"text": prompt_usuario}]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.6
+        }
+    }
+
+    modelos_candidatos = [
+        "gemini-3.6-flash",
+        "gemini-3.7-flash",
+        "gemini-3.5-flash",
+        "gemini-flash-latest"
+    ]
+
+    for modelo in modelos_candidatos:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={api_key}"
+        try:
+            res = requests.post(url, json=payload, timeout=25)
+            if res.status_code == 200:
+                resp_json = res.json()
+                candidates = resp_json.get("candidates", [])
+                if candidates:
+                    text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                    if text:
+                        return text.strip()
+            else:
+                print(f"⚠️ Gemini ({modelo}) retornou código {res.status_code}: {res.text[:100]}")
+        except Exception as e:
+            print(f"⚠️ Erro ao conectar com Gemini ({modelo}): {e}")
+
+    return gerar_analise_ia_fallback(dados, mensagem_usuario, account_id=account_id)
+
+
 if __name__ == "__main__":
     print("\n📡 Buscando dados e métricas direto do Meta Ads...\n")
     resultado = relatorio_meta_ads(date_preset="last_30d")

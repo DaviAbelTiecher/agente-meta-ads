@@ -16,6 +16,7 @@ let datePickerState = {
 document.addEventListener('DOMContentLoaded', () => {
     initDatePicker();
     initEvents();
+    initAIChat();
     fetchData();
 });
 
@@ -1064,3 +1065,177 @@ function renderDetail(id) {
 
     detailPanel.innerHTML = contentHTML;
 }
+
+/* ==========================================================================
+   ASSISTENTE DE IA - CHAT WIDGET
+   ========================================================================== */
+
+function initAIChat() {
+    const chatToggleBtn = document.getElementById('aiChatToggleBtn');
+    const chatWindow = document.getElementById('aiChatWindow');
+    const chatCloseBtn = document.getElementById('aiChatCloseBtn');
+    const chatClearBtn = document.getElementById('aiChatClearBtn');
+    const chatInput = document.getElementById('aiChatInput');
+    const chatSendBtn = document.getElementById('aiChatSendBtn');
+    const chatMessages = document.getElementById('aiChatMessages');
+
+    if (!chatToggleBtn || !chatWindow) return;
+
+    // Toggle Chat Window
+    chatToggleBtn.addEventListener('click', () => {
+        chatWindow.classList.toggle('hidden');
+        if (!chatWindow.classList.contains('hidden')) {
+            chatInput.focus();
+            scrollToBottom();
+        }
+    });
+
+    chatCloseBtn.addEventListener('click', () => {
+        chatWindow.classList.add('hidden');
+    });
+
+    // Clear Chat Messages
+    chatClearBtn.addEventListener('click', () => {
+        chatMessages.innerHTML = `
+            <div class="ai-msg bot-msg">
+                <div class="msg-avatar">🤖</div>
+                <div class="msg-content">
+                    Histórico limpo! Como posso te ajudar agora? 👋
+                </div>
+            </div>
+            <div class="ai-quick-chips">
+                <button type="button" class="quick-chip" data-prompt="Os resultados do período estão satisfatórios?">📊 Desempenho Geral</button>
+                <button type="button" class="quick-chip" data-prompt="Quais contas estão com resultado meio fraco?">⚠️ Contas Fracas</button>
+                <button type="button" class="quick-chip" data-prompt="Quais são as melhores contas do período?">🏆 Melhores Contas</button>
+            </div>
+        `;
+        rebindQuickChips();
+    });
+
+    // Send Message Event
+    const handleSend = () => {
+        const text = chatInput.value.trim();
+        if (!text) return;
+
+        appendUserMessage(text);
+        chatInput.value = '';
+
+        sendAIMessage(text);
+    };
+
+    chatSendBtn.addEventListener('click', handleSend);
+    chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            handleSend();
+        }
+    });
+
+    // Quick Action Chips Event Delegation
+    rebindQuickChips();
+
+    function rebindQuickChips() {
+        const chips = chatMessages.querySelectorAll('.quick-chip');
+        chips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                const promptText = chip.getAttribute('data-prompt');
+                if (promptText) {
+                    appendUserMessage(promptText);
+                    sendAIMessage(promptText);
+                }
+            });
+        });
+    }
+
+    function appendUserMessage(text) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'ai-msg user-msg';
+        msgDiv.innerHTML = `
+            <div class="msg-avatar">👤</div>
+            <div class="msg-content">${escapeHTML(text)}</div>
+        `;
+        chatMessages.appendChild(msgDiv);
+        scrollToBottom();
+    }
+
+    function sendAIMessage(userText) {
+        // Create typing indicator
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'ai-msg bot-msg typing-msg';
+        typingDiv.innerHTML = `
+            <div class="msg-avatar">🤖</div>
+            <div class="msg-content">
+                <div class="typing-dots">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+        `;
+        chatMessages.appendChild(typingDiv);
+        scrollToBottom();
+
+        const payload = {
+            message: userText,
+            date_preset: datePickerState.isCustom ? 'custom' : datePickerState.preset,
+            since: datePickerState.isCustom ? datePickerState.since : null,
+            until: datePickerState.isCustom ? datePickerState.until : null,
+            account_id: selectedAccountId
+        };
+
+        fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            typingDiv.remove();
+
+            const botDiv = document.createElement('div');
+            botDiv.className = 'ai-msg bot-msg';
+            const formattedAnswer = formatMarkdown(data.answer || 'Desculpe, não consegui processar a análise.');
+
+            botDiv.innerHTML = `
+                <div class="msg-avatar">🤖</div>
+                <div class="msg-content">${formattedAnswer}</div>
+            `;
+            chatMessages.appendChild(botDiv);
+            scrollToBottom();
+        })
+        .catch(err => {
+            typingDiv.remove();
+
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'ai-msg bot-msg';
+            errorDiv.innerHTML = `
+                <div class="msg-avatar">🤖</div>
+                <div class="msg-content">⚠️ Erro ao conectar com o assistente de IA. Tente novamente em instantes.</div>
+            `;
+            chatMessages.appendChild(errorDiv);
+            scrollToBottom();
+        });
+    }
+
+    function scrollToBottom() {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function escapeHTML(str) {
+        return str.replace(/[&<>'"]/g, 
+            tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+        );
+    }
+
+    function formatMarkdown(text) {
+        if (!text) return '';
+        let html = text;
+        // Escape basic HTML except safe formatting
+        html = escapeHTML(html);
+        // Bold **text**
+        html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        // Italic *text*
+        html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+        // Line breaks
+        html = html.replace(/\n/g, '<br>');
+        return html;
+    }
+}
+
