@@ -618,10 +618,17 @@ function setPresetMetricsFilter(preset) {
     }
 }
 
+function scrollToAccounts() {
+    document.querySelector('.sidebar')?.scrollIntoView({ behavior: 'smooth' });
+}
+
 function selectAccount(id) {
     selectedAccountId = id;
     renderSidebar(document.getElementById('searchInput').value.toLowerCase());
     renderDetail(id);
+    if (window.innerWidth <= 768) {
+        document.getElementById('detailPanel')?.scrollIntoView({ behavior: 'smooth' });
+    }
 }
 
 function renderDetail(id) {
@@ -643,6 +650,10 @@ function renderDetail(id) {
     const saldoMeta = conta.saldo_str || (conta.is_cartao ? 'Cartão' : 'R$ 0,00');
 
     let contentHTML = `
+        <button type="button" class="btn-back-mobile" onclick="scrollToAccounts()">
+            <span>◄ Voltar para Lista de Locais</span>
+        </button>
+
         <div class="detail-header">
             <div class="detail-title">
                 <h2>${conta.nome}</h2>
