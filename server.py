@@ -75,29 +75,33 @@ def api_metricas():
 
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
-    req_data = request.get_json() or {}
-    mensagem = req_data.get("message", "").strip()
-    date_preset = req_data.get("date_preset", "last_30d")
-    since = req_data.get("since")
-    until = req_data.get("until")
-    account_id = req_data.get("account_id")
+    try:
+        req_data = request.get_json() or {}
+        mensagem = req_data.get("message", "").strip()
+        date_preset = req_data.get("date_preset", "last_30d")
+        since = req_data.get("since")
+        until = req_data.get("until")
+        account_id = req_data.get("account_id")
 
-    if not mensagem:
-        return jsonify({"answer": "Por favor, digite uma pergunta."}), 400
+        if not mensagem:
+            return jsonify({"answer": "Por favor, digite uma pergunta."}), 400
 
-    if since and until:
-        cache_key = f"custom_{since}_{until}"
-    else:
-        cache_key = date_preset if date_preset in ["today", "yesterday", "last_7d", "last_15d", "last_30d", "this_month", "last_month"] else "last_30d"
+        if since and until:
+            cache_key = f"custom_{since}_{until}"
+        else:
+            cache_key = date_preset if date_preset in ["today", "yesterday", "last_7d", "last_15d", "last_30d", "this_month", "last_month"] else "last_30d"
 
-    cache_item = CACHE_METRICAS.get(cache_key)
-    if cache_item and cache_item.get("dados"):
-        dados = cache_item["dados"]
-    else:
-        dados = obter_dados_estruturados(date_preset=date_preset, since=since, until=until)
+        cache_item = CACHE_METRICAS.get(cache_key)
+        if cache_item and cache_item.get("dados"):
+            dados = cache_item["dados"]
+        else:
+            dados = obter_dados_estruturados(date_preset=date_preset, since=since, until=until)
 
-    resposta = analisar_dados_ia(dados, mensagem, account_id=account_id)
-    return jsonify({"answer": resposta})
+        resposta = analisar_dados_ia(dados, mensagem, account_id=account_id)
+        return jsonify({"answer": resposta})
+    except Exception as e:
+        print(f"❌ Erro na API Chat: {e}")
+        return jsonify({"answer": f"⚠️ Erro no servidor de IA: {str(e)}"}), 200
 
 # Dispara o pré-carregamento inicial dos dados
 threading.Thread(target=pre_carregar_inicial).start()

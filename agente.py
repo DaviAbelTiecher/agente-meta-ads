@@ -688,13 +688,24 @@ def gerar_analise_ia_fallback(dados, mensagem, account_id=None):
 def analisar_dados_ia(dados, mensagem_usuario, account_id=None):
     """
     Processa a mensagem do usuário utilizando a API do Gemini com a persona de Gestor de Tráfego Sênior
-    e Especialista em Data Analytics. Injeta dados dinâmicos em JSON da conta selecionada e do período,
-    com formato de resposta obrigatório em 3 blocos visuais e temperature entre 0.5 e 0.7 (0.6).
+    e Especialista em Data Analytics. Injeta dados dinâmicos em JSON da conta selecionada e do período.
     """
     import json
 
+    if not dados:
+        dados = {}
+
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if not api_key:
+        if not dados.get("contas"):
+            return (
+                "🚨 **Alerta / Diagnóstico Principal**\n"
+                "Chave de API do Gemini (`GEMINI_API_KEY`) não foi encontrada no servidor.\n\n"
+                "📊 **Métricas Críticas**\n"
+                "Sem conexão com a API do Google Gemini.\n\n"
+                "💡 **Recomendação Prática**\n"
+                "Cadastre a variável `GEMINI_API_KEY` com sua chave do Google AI Studio no painel do Easypanel e faça o redeploy."
+            )
         return gerar_analise_ia_fallback(dados, mensagem_usuario, account_id=account_id)
 
     # 1. Estruturação dos Dados Dinâmicos em JSON
@@ -818,9 +829,10 @@ def analisar_dados_ia(dados, mensagem_usuario, account_id=None):
     }
 
     modelos_candidatos = [
-        "gemini-3.6-flash",
-        "gemini-3.7-flash",
-        "gemini-3.5-flash",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
         "gemini-flash-latest"
     ]
 
