@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import datetime
 import requests
 from dotenv import load_dotenv
@@ -829,27 +830,34 @@ def analisar_dados_ia(dados, mensagem_usuario, account_id=None):
     }
 
     modelos_candidatos = [
-        "gemini-3.6-flash",
         "gemini-3.7-flash",
+        "gemini-3.6-flash",
         "gemini-3.5-flash",
         "gemini-flash-latest"
     ]
 
     for modelo in modelos_candidatos:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={api_key}"
-        try:
-            res = requests.post(url, json=payload, timeout=25)
-            if res.status_code == 200:
-                resp_json = res.json()
-                candidates = resp_json.get("candidates", [])
-                if candidates:
-                    text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                    if text:
-                        return text.strip()
-            else:
-                print(f"⚠️ Gemini ({modelo}) retornou código {res.status_code}: {res.text[:100]}")
-        except Exception as e:
-            print(f"⚠️ Erro ao conectar com Gemini ({modelo}): {e}")
+        for tentativa in range(3):
+            try:
+                res = requests.post(url, json=payload, timeout=60)
+                if res.status_code == 200:
+                    resp_json = res.json()
+                    candidates = resp_json.get("candidates", [])
+                    if candidates:
+                        text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        if text:
+                            return text.strip()
+                elif res.status_code == 503:
+                    print(f"⚠️ Gemini ({modelo}) com alta demanda (503). Tentativa {tentativa + 1}/3...")
+                    time.sleep(1.5)
+                    continue
+                else:
+                    print(f"⚠️ Gemini ({modelo}) retornou código {res.status_code}: {res.text[:100]}")
+                    break
+            except Exception as e:
+                print(f"⚠️ Erro ao conectar com Gemini ({modelo}): {e}")
+                break
 
     return gerar_analise_ia_fallback(dados, mensagem_usuario, account_id=account_id)
 
