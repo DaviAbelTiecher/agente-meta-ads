@@ -1109,15 +1109,16 @@ function initAIChat() {
     chatClearBtn.addEventListener('click', () => {
         chatMessages.innerHTML = `
             <div class="ai-msg bot-msg">
-                <div class="msg-avatar">🤖</div>
+                <div class="msg-avatar">⚡</div>
                 <div class="msg-content">
-                    Histórico limpo! Como posso te ajudar agora? 👋
+                    Histórico limpo! Bora continuar. O que quer analisar agora?
                 </div>
             </div>
             <div class="ai-quick-chips">
-                <button type="button" class="quick-chip" data-prompt="Os resultados do período estão satisfatórios?">📊 Desempenho Geral</button>
-                <button type="button" class="quick-chip" data-prompt="Quais contas estão com resultado meio fraco?">⚠️ Contas Fracas</button>
-                <button type="button" class="quick-chip" data-prompt="Quais são as melhores contas do período?">🏆 Melhores Contas</button>
+                <button type="button" class="quick-chip" data-prompt="Como tá o panorama geral de toda a nossa operação?">📊 Visão Geral</button>
+                <button type="button" class="quick-chip" data-prompt="Quais contas estão com saldo baixo ou risco de pausar?">💳 Saldos em Risco</button>
+                <button type="button" class="quick-chip" data-prompt="Quais contas tão torrando verba ou com CPA estourado?">🚨 Verba Vazando</button>
+                <button type="button" class="quick-chip" data-prompt="Quais contas tão voando e prontas pra escalar verba?">🚀 Oportunidades de Escala</button>
             </div>
         `;
         rebindQuickChips();
@@ -1205,7 +1206,7 @@ function initAIChat() {
             const formattedAnswer = formatMarkdown(data.answer || 'Desculpe, não consegui processar a análise.');
 
             botDiv.innerHTML = `
-                <div class="msg-avatar">🤖</div>
+                <div class="msg-avatar">⚡</div>
                 <div class="msg-content">${formattedAnswer}</div>
             `;
             chatMessages.appendChild(botDiv);
@@ -1217,8 +1218,8 @@ function initAIChat() {
             const errorDiv = document.createElement('div');
             errorDiv.className = 'ai-msg bot-msg';
             errorDiv.innerHTML = `
-                <div class="msg-avatar">🤖</div>
-                <div class="msg-content">⚠️ Erro ao conectar com o assistente de IA. Tente novamente em instantes.</div>
+                <div class="msg-avatar">⚡</div>
+                <div class="msg-content">⚠️ Ops, deu uma oscilada na rede aqui. Manda de novo que eu puxo!</div>
             `;
             chatMessages.appendChild(errorDiv);
             scrollToBottom();

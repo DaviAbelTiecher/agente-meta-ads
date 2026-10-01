@@ -19,14 +19,25 @@ def atualizar_cache(cache_key, date_preset=None, since=None, until=None):
     CACHE_EM_ATUALIZACAO[cache_key] = True
     try:
         dados = obter_dados_estruturados(date_preset=date_preset, since=since, until=until)
-        if dados and len(dados.get("contas", [])) > 0:
+        novas_contas = dados.get("contas", []) if dados else []
+        antigo_item = CACHE_METRICAS.get(cache_key, {})
+        antigas_contas = antigo_item.get("dados", {}).get("contas", [])
+
+        # Protege o cache: não substitui um cache rico de 40+ contas por um retorno degradado de rede
+        if len(novas_contas) >= 5 or len(novas_contas) >= len(antigas_contas):
             CACHE_METRICAS[cache_key] = {
                 "dados": dados,
                 "timestamp": time.time()
             }
-            print(f"✅ Cache '{cache_key}' atualizado com {len(dados['contas'])} contas.")
+            print(f"✅ Cache '{cache_key}' atualizado com sucesso ({len(novas_contas)} contas).")
+        elif not antigas_contas and len(novas_contas) > 0:
+            CACHE_METRICAS[cache_key] = {
+                "dados": dados,
+                "timestamp": time.time()
+            }
+            print(f"✅ Cache inicial '{cache_key}' registrado ({len(novas_contas)} contas).")
         else:
-            print(f"⚠️ Nenhuma conta retornada para cache '{cache_key}': {dados}")
+            print(f"⚠️ Retorno suspeito ({len(novas_contas)} contas) para '{cache_key}'. Mantendo cache existente com {len(antigas_contas)} contas.")
     except Exception as e:
         print(f"❌ Erro ao atualizar cache '{cache_key}': {e}")
     finally:
@@ -57,13 +68,22 @@ def api_metricas():
     cache_item = CACHE_METRICAS.get(cache_key)
     agora = time.time()
 
-    # Se não temos cache ou se foi forçada a atualização
-    if not cache_item or force_refresh or (agora - cache_item.get("timestamp", 0) > 600):
-        # Dispara atualização em thread de segundo plano para resposta instantânea na API
-        threading.Thread(target=atualizar_cache, args=(cache_key, date_preset, since, until)).start()
-        cache_item = CACHE_METRICAS.get(cache_key)
+    # Se não temos cache ou se o cache existente tem poucas contas (ex: resquício de falha de conexão)
+    cache_invalido = (not cache_item) or (len(cache_item.get("dados", {}).get("contas", [])) < 3)
 
-    if cache_item:
+    if force_refresh:
+        # Se forçar atualização (botão Sincronizar API), executa e aguarda os dados novos
+        atualizar_cache(cache_key, date_preset, since, until)
+        cache_item = CACHE_METRICAS.get(cache_key)
+    elif cache_invalido:
+        # Se não há cache válido, processa imediatamente
+        atualizar_cache(cache_key, date_preset, since, until)
+        cache_item = CACHE_METRICAS.get(cache_key)
+    elif (agora - cache_item.get("timestamp", 0) > 600):
+        # Cache expirado (10 min): dispara thread em background para não travar o cliente
+        threading.Thread(target=atualizar_cache, args=(cache_key, date_preset, since, until)).start()
+
+    if cache_item and cache_item.get("dados"):
         return jsonify(cache_item["dados"])
     else:
         return jsonify({
